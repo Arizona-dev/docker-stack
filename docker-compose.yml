@@ -1,0 +1,226 @@
+version: "3.7"
+services:
+  app:
+    build:
+      args:
+        user: ${USER}
+        uid: ${UID}
+      context: .
+      dockerfile: Dockerfile
+    image: travellist
+    container_name: travellist-back
+    restart: unless-stopped
+    working_dir: /var/www/
+    volumes:
+      - ./:/var/www
+    networks:
+      - travellist
+      - app-network
+
+  db:
+    image: mysql:8.0
+    container_name: travellist-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_USER: ${DB_USERNAME}
+      SERVICE_TAGS: dev
+      SERVICE_NAME: mysql
+    volumes:
+      - ./docker/mysql:/docker-entrypoint-initdb.d
+    networks:
+      - travellist
+
+  nginx:
+    image: nginx:1.17-alpine
+    container_name: travellist-front
+    restart: unless-stopped
+    ports:
+      - 8000:80
+    volumes:
+      - ./:/var/www
+      - ./docker/nginx:/etc/nginx/conf.d
+    networks:
+      - travellist
+  
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: travellist-phpmyadmin
+    restart: unless-stopped
+    depends_on:
+      - database
+    ports:
+      - 8888:80
+      - 8889:443
+    environment:
+      - PHP_UPLOAD_MAX_FILESIZE=100MB
+      - PMA_HOST=db
+      - PMA_USER=travellist_user
+      - PMA_PASSWORD=password
+    networks:
+      - travellist
+
+  redis:
+    image: redis:4.0
+    container_name: travellist-redis
+    ports:
+      - "6382:6379"
+    networks:
+      - app-network
+
+  elasticsearch:
+    container_name: travellist-elasticsearch
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.12.0
+    ports:
+      - "9200:9200"
+    environment:
+      - "discovery.type=single-node"
+      - "bootstrap.memory_lock=true"
+      - "ES_JAVA_OPTS=-Xms1G -Xmx1G"
+      - "xpack.security.enabled=false"
+      - "http.cors.enabled=true"
+      - "http.cors.allow-origin=*"
+    networks:
+      - elk_network
+
+  # kibana (official image)
+  # https://hub.docker.com/_/kibana
+  kibana:
+    container_name: travellist-kibana
+    image: docker.elastic.co/kibana/kibana:7.12.0
+    ports:
+      - "5601:5601"
+    environment:
+      - "ELASTICSEARCH_URL=http://sb-elasticsearch"
+    depends_on:
+      - elasticsearch
+    networks:
+      - elk_network
+
+  logstash:
+    container_name: travellist-logstash
+    image: docker.elastic.co/logstash/logstash:7.12.0
+    volumes:
+      - type: bind
+        source: ./docker/logstash/config/logstash.yml
+        target: /usr/share/logstash/config/logstash.yml
+        read_only: true
+      - type: bind
+        source: ./docker/logstash/pipeline
+        target: /usr/share/logstash/pipeline
+        read_only: true
+    ports:
+      - 5000:5000
+      - 9600:9600
+    environment:
+      LS_JAVA_OPTS: "-Xmx256m -Xms256m"
+    networks:
+      - elk_network
+    depends_on:
+      - elasticsearch
+
+
+  # Core services
+  front:
+    image: ${DOCKER_ORG:-mailu}/${DOCKER_PREFIX:-}nginx:${MAILU_VERSION:-1.7}
+    restart: always
+    env_file: mailu.env
+    logging:
+      driver: json-file
+    ports:
+      - 8080:80
+      - 444:443
+      - 25:25
+      - 465:465
+      - 587:587
+      - 110:110
+      - 995:995
+      - 143:143
+      - 993:993
+    volumes:
+      - ./mailu/certs:/certs
+      - ./mailu/overrides/nginx:/overrides
+
+
+  admin:
+    image: ${DOCKER_ORG:-mailu}/${DOCKER_PREFIX:-}admin:${MAILU_VERSION:-1.7}
+    restart: always
+    env_file: mailu.env
+    volumes:
+      - ./mailu/data:/data
+      - ./mailu/dkim:/dkim
+    depends_on:
+      - redis
+
+  imap:
+    image: ${DOCKER_ORG:-mailu}/${DOCKER_PREFIX:-}dovecot:${MAILU_VERSION:-1.7}
+    restart: always
+    env_file: mailu.env
+    volumes:
+      - ./mailu/mail:/mail
+      - ./mailu/overrides:/overrides
+    depends_on:
+      - front
+
+  smtp:
+    image: ${DOCKER_ORG:-mailu}/${DOCKER_PREFIX:-}postfix:${MAILU_VERSION:-1.7}
+    restart: always
+    env_file: mailu.env
+    volumes:
+      - ./mailu/overrides:/overrides
+    depends_on:
+      - front
+
+  antispam:
+    image: ${DOCKER_ORG:-mailu}/${DOCKER_PREFIX:-}rspamd:${MAILU_VERSION:-1.7}
+    restart: always
+    env_file: mailu.env
+    volumes:
+      - ./mailu/filter:/var/lib/rspamd
+      - ./mailu/dkim:/dkim
+      - ./mailu/overrides/rspamd:/etc/rspamd/override.d
+    depends_on:
+      - front
+
+  # Optional services
+
+  webdav:
+    image: ${DOCKER_ORG:-mailu}/${DOCKER_PREFIX:-}radicale:${MAILU_VERSION:-1.7}
+    restart: always
+    env_file: mailu.env
+    volumes:
+      - ./mailu/dav:/data
+
+  fetchmail:
+    image: ${DOCKER_ORG:-mailu}/${DOCKER_PREFIX:-}fetchmail:${MAILU_VERSION:-1.7}
+    restart: always
+    env_file: mailu.env
+
+  # Webmail
+  webmail:
+    image: ${DOCKER_ORG:-mailu}/${DOCKER_PREFIX:-}roundcube:${MAILU_VERSION:-1.7}
+    restart: always
+    env_file: mailu.env
+    volumes:
+      - ./mailu/webmail:/data
+    depends_on:
+      - imap
+  
+volumes:
+  elasticsearch:
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 192.168.203.0/24
+  travellist:
+    driver: bridge
+  app-network:
+    driver: bridge
+  elk_network:
+    driver: bridge
