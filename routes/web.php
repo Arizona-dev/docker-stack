@@ -14,7 +14,6 @@ Route::get('/', function () {
     $redis->set('name', 'ESGI NADERI & MONDESIR');
 
   } catch (Exception $e) {
-      var_dump($e);
   }
 
   try {
