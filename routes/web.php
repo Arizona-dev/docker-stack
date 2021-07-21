@@ -5,16 +5,16 @@ use Illuminate\Support\Facades\DB;
 Route::get('/', function () {
   $visited = DB::select('select * from places where visited = ?', [1]); 
   $togo = DB::select('select * from places where visited = ?', [0]);
-  $data = 's';
+  $data = 'Sample data';
 
   try {
     $redis = new \Predis\Client([
         'host' => env('REDIS_HOST', '')
     ]);
-    $redis->set('name', 'ESGI Naderi & Mondesir');
+    $redis->set('name', 'ESGI NADERI & MONDESIR');
 
   } catch (Exception $e) {
-      
+      var_dump($e);
   }
 
   try {

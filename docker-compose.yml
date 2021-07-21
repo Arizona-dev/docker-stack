@@ -14,8 +14,8 @@ services:
     volumes:
       - ./:/var/www
     networks:
-      - travellist
       - app-network
+      - travellist
 
   db:
     image: mysql:8.0
@@ -37,13 +37,29 @@ services:
     image: nginx:1.17-alpine
     container_name: travellist-front
     restart: unless-stopped
+    logging:
+      driver: json-file
+    env_file: mailu.env
     ports:
-      - 8000:80
+      - 8080:80
+      - 8090:8090
+      - 8085:8085
+      - 443:443
+      - 25:25
+      - 465:465
+      - 587:587
+      - 110:110
+      - 995:995
+      - 143:143
+      - 993:993
     volumes:
       - ./:/var/www
       - ./docker/nginx:/etc/nginx/conf.d
+      - ./mailu/certs:/certs
+      - ./mailu/overrides/nginx:/overrides
     networks:
       - travellist
+      - mailu
   
   phpmyadmin:
     image: phpmyadmin:latest
@@ -66,7 +82,7 @@ services:
     image: redis:4.0
     container_name: travellist-redis
     ports:
-      - "6382:6379"
+      - 6382:6379
     networks:
       - app-network
 
@@ -74,14 +90,14 @@ services:
     container_name: travellist-elasticsearch
     image: docker.elastic.co/elasticsearch/elasticsearch:7.12.0
     ports:
-      - "9200:9200"
+      - 9200:9200
     environment:
-      - "discovery.type=single-node"
-      - "bootstrap.memory_lock=true"
-      - "ES_JAVA_OPTS=-Xms1G -Xmx1G"
-      - "xpack.security.enabled=false"
-      - "http.cors.enabled=true"
-      - "http.cors.allow-origin=*"
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - ES_JAVA_OPTS=-Xms1G -Xmx1G
+      - xpack.security.enabled=false
+      - http.cors.enabled=true
+      - http.cors.allow-origin=*
     networks:
       - elk_network
 
@@ -121,29 +137,6 @@ services:
     depends_on:
       - elasticsearch
 
-
-  # Core services
-  front:
-    image: ${DOCKER_ORG:-mailu}/${DOCKER_PREFIX:-}nginx:${MAILU_VERSION:-1.7}
-    restart: always
-    env_file: mailu.env
-    logging:
-      driver: json-file
-    ports:
-      - 8080:80
-      - 444:443
-      - 25:25
-      - 465:465
-      - 587:587
-      - 110:110
-      - 995:995
-      - 143:143
-      - 993:993
-    volumes:
-      - ./mailu/certs:/certs
-      - ./mailu/overrides/nginx:/overrides
-
-
   admin:
     image: ${DOCKER_ORG:-mailu}/${DOCKER_PREFIX:-}admin:${MAILU_VERSION:-1.7}
     restart: always
@@ -151,8 +144,12 @@ services:
     volumes:
       - ./mailu/data:/data
       - ./mailu/dkim:/dkim
+    ports:
+      - 8090:80
     depends_on:
       - redis
+    networks:
+      - travellist
 
   imap:
     image: ${DOCKER_ORG:-mailu}/${DOCKER_PREFIX:-}dovecot:${MAILU_VERSION:-1.7}
@@ -162,7 +159,9 @@ services:
       - ./mailu/mail:/mail
       - ./mailu/overrides:/overrides
     depends_on:
-      - front
+      - nginx
+    networks:
+      - mailu
 
   smtp:
     image: ${DOCKER_ORG:-mailu}/${DOCKER_PREFIX:-}postfix:${MAILU_VERSION:-1.7}
@@ -171,7 +170,9 @@ services:
     volumes:
       - ./mailu/overrides:/overrides
     depends_on:
-      - front
+      - nginx
+    networks:
+      - mailu
 
   antispam:
     image: ${DOCKER_ORG:-mailu}/${DOCKER_PREFIX:-}rspamd:${MAILU_VERSION:-1.7}
@@ -182,7 +183,9 @@ services:
       - ./mailu/dkim:/dkim
       - ./mailu/overrides/rspamd:/etc/rspamd/override.d
     depends_on:
-      - front
+      - nginx
+    networks:
+      - mailu
 
   # Optional services
 
@@ -192,11 +195,15 @@ services:
     env_file: mailu.env
     volumes:
       - ./mailu/dav:/data
+    networks:
+      - mailu
 
   fetchmail:
     image: ${DOCKER_ORG:-mailu}/${DOCKER_PREFIX:-}fetchmail:${MAILU_VERSION:-1.7}
     restart: always
     env_file: mailu.env
+    networks:
+      - mailu
 
   # Webmail
   webmail:
@@ -205,14 +212,18 @@ services:
     env_file: mailu.env
     volumes:
       - ./mailu/webmail:/data
+    ports:
+      - 8085:80
     depends_on:
       - imap
+    networks:
+      - mailu
   
 volumes:
   elasticsearch:
 
 networks:
-  default:
+  mailu:
     driver: bridge
     ipam:
       driver: default

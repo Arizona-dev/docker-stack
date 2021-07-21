@@ -8,5 +8,6 @@ docker compose build --build-arg user=esgi --build-arg uid=1000
 
 docker compose up -d
 
-Front url: http://localhost:8000
-Phpmyadmin url: http://localhost:8888
+Front URL: http://localhost:8000
+Phpmyadmin URL: http://localhost:8888
+Elastic URL: http://localhost:5601/
