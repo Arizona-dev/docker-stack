@@ -1,0 +1,11 @@
+### Front
+GET http://localhost
+
+### PhpMyAdmin
+GET http://localhost:8888
+
+### Elasticsearch & Kibana
+GET http://localhost:5601
+
+### Webmail
+GET http://localhost:8086

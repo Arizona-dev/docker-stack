@@ -33,7 +33,7 @@ services:
     networks:
       - travellist
 
-  nginx:
+  front:
     image: nginx:1.17-alpine
     container_name: travellist-front
     restart: unless-stopped
@@ -42,8 +42,8 @@ services:
     env_file: mailu.env
     ports:
       - 8080:80
-      - 8090:8090
-      - 8085:8085
+      - 8090:8091
+      - 8085:8086
       - 443:443
       - 25:25
       - 465:465
@@ -66,7 +66,7 @@ services:
     container_name: travellist-phpmyadmin
     restart: unless-stopped
     depends_on:
-      - database
+      - db
     ports:
       - 8888:80
       - 8889:443
@@ -79,8 +79,11 @@ services:
       - travellist
 
   redis:
-    image: redis:4.0
+    image: redis:alpine
     container_name: travellist-redis
+    restart: always
+    volumes:
+      - /mailu/redis:/data
     ports:
       - 6382:6379
     networks:
@@ -145,7 +148,7 @@ services:
       - ./mailu/data:/data
       - ./mailu/dkim:/dkim
     ports:
-      - 8090:80
+      - 8091:80
     depends_on:
       - redis
     networks:
@@ -160,7 +163,7 @@ services:
       - ./mailu/mail:/mail
       - ./mailu/overrides:/overrides
     depends_on:
-      - nginx
+      - front
     networks:
       - mailu
 
@@ -171,7 +174,7 @@ services:
     volumes:
       - ./mailu/overrides:/overrides
     depends_on:
-      - nginx
+      - front
     networks:
       - mailu
 
@@ -184,7 +187,7 @@ services:
       - ./mailu/dkim:/dkim
       - ./mailu/overrides/rspamd:/etc/rspamd/override.d
     depends_on:
-      - nginx
+      - front
     networks:
       - mailu
 
@@ -214,7 +217,7 @@ services:
     volumes:
       - ./mailu/webmail:/data
     ports:
-      - 8085:80
+      - 8086:80
     depends_on:
       - imap
     networks:

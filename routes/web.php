@@ -14,6 +14,7 @@ Route::get('/', function () {
     $redis->set('name', 'ESGI NADERI & MONDESIR');
 
   } catch (Exception $e) {
+    // print_r($e);
   }
 
   try {
@@ -22,7 +23,7 @@ Route::get('/', function () {
     ]);
     $data = $redis->get('name');
   } catch (Exception $e) {
-
+    echo $e->getMessage();
   }
   
   return view('travel_list', ['visited' => $visited, 'togo' => $togo, 'redis' => $data]);
